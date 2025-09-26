@@ -392,6 +392,8 @@ effect to all frames."
             (interval (plist-get styles :blink-cursor-interval))
             (delay (plist-get styles :blink-cursor-delay)))
         (setq cursory-last-selected-preset preset)
+        ;; Wipe out any locally applied preset in this buffer.
+        (cursory--kill-local-preset)
         (cursory--set-cursor color-value)
         (setq-default cursor-type type
                       cursor-in-non-selected-windows type-no-select
@@ -404,6 +406,37 @@ effect to all frames."
         (run-hooks 'cursory-set-preset-hook))
     (user-error "Cannot determine styles of preset `%s'" preset)))
 
+(defun cursory--set-local-preset-subr (preset)
+  "Set PRESET of `cursory-presets' to the local scope."
+  (if-let* ((styles (cursory--get-preset-properties preset)))
+      ;; We do not include this in the `if-let*' because we also accept
+      ;; nil values for :cursor-type, :cursor-in-non-selected-windows.
+      (let ((color-value (plist-get styles :cursor-color))
+            (type (plist-get styles :cursor-type))
+            (type-no-select (plist-get styles :cursor-in-non-selected-windows))
+            (blinks (plist-get styles :blink-cursor-blinks))
+            (interval (plist-get styles :blink-cursor-interval))
+            (delay (plist-get styles :blink-cursor-delay)))
+        (cursory--set-cursor color-value)
+        (setq-local cursor-type type
+                    cursor-in-non-selected-windows type-no-select
+                    blink-cursor-blinks blinks
+                    blink-cursor-interval interval
+                    blink-cursor-delay delay)
+        (blink-cursor-mode (plist-get styles :blink-cursor-mode))
+        (run-hooks 'cursory-set-preset-hook))
+    (user-error "Cannot determine styles of preset `%s'" preset)))
+
+(defun cursory--kill-local-preset ()
+  "Clear any local preset if one exists."
+  ;; Kill the local variables, ignoring any errors if they were unset
+  (ignore-errors
+    (mapcar 'kill-local-variable '(cursor-type
+                                   cursor-in-non-selected-windows
+                                   blink-cursor-blinks
+                                   blink-cursor-interval
+                                   blink-cursor-delay))))
+
 ;;;###autoload
 (defun cursory-set-preset (style)
   "Set cursor preset associated with STYLE.
@@ -415,6 +448,25 @@ Call `cursory-set-preset-hook' as a final step."
   (interactive (list (cursory-set-preset-prompt)))
   (if-let* ((preset (cursory--get-preset-as-symbol style)))
       (cursory--set-preset-subr preset)
+    (user-error "Cannot determine preset `%s'" preset)))
+
+;;;###autoload
+(defun cursory-set-local-preset (style)
+  "Set local cursor preset associated with STYLE.
+
+STYLE is a symbol that represents the car of a list in
+`cursory-presets'.
+
+Call `cursory-set-preset-hook' as a final step.
+
+This does not update `cursory-last-selected-preset' or
+`cursory-store-latest-preset'.
+
+CAUTION: setting cursor color or enabling/disabling blink mode using
+this function sets those attributes GLOBALLY."
+  (interactive (list (cursory-set-preset-prompt)))
+  (if-let* ((preset (cursory--get-preset-as-symbol style)))
+      (cursory--set-local-preset-subr preset)
     (user-error "Cannot determine preset `%s'" preset)))
 
 ;;;###autoload
